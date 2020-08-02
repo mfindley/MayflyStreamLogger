@@ -2,7 +2,7 @@
  * ------------------------------------------------------------
  * 
  * This sketch wakes the Mayfly up at specific times, 
- * records the float switch state, 
+ * records the float switch state, electrical resistivity, and environmental temperature 
  * writes the data to the microSD card, 
  * prints the data string to the serial port,
  * and then goes back to sleep.
@@ -35,11 +35,12 @@
 
 // The analog pin that connects to the ER sensor.
 #define ER_SENSOR_PIN A0
+#define THERM_SENSOR_PIN A1
 
 char*     filename = (char*)"logfile.csv"; // The data log file
 
 // Data Header
-#define   DATA_HEADER "Sensor Name:,FloatSwitch,EnviroDIY_Mayfly Data Logger,EnviroDIY_Mayfly Data Logger\r\nVariable Name:,Up/Down,Battery_Voltage,Board_Temp_C,ER\r\nResult Unit:,wet/dry,volt,degreeCelsius,Ohms\r\nDate and Time in MDT (UTC-6),Up/Down,Battery voltage,Temperature,ER"
+#define   DATA_HEADER "Sensor Name:,FloatSwitch,EnviroDIY_Mayfly Data Logger,EnviroDIY_Mayfly Data Logger,ER,NTC_Thermistor\r\nVariable Name:,Up/Down,Battery_Voltage,Board_Temp_C,ER,Stream_Channel_Temp_C\r\nResult Unit:,wet/dry,volt,degreeCelsius,Ohms,degreeCelsius\r\nDate and Time in MDT (UTC-6),Up/Down,Battery voltage,BoardTemp,ER,StreamChannelTemp"
 
 #define   FLOAT_SWITCH_PIN 4 // digital pin 4
 #define   POWER_PIN 22  // pin on the Mayfly to switch on/off power to the sensors.
@@ -59,6 +60,9 @@ float     batteryvoltage;
 // The variables for the ER sensor
 // The resistance (Ω) of the resistor in series with the ER sensor
 const int resistorSeries_ER = 10000;
+
+// global variable for the thermistor sensor
+int raw_adc_val = 0;
 
 /*
  * --------------------------------------------------
@@ -86,6 +90,52 @@ String getDateTime();
 uint32_t getNow();
 
 static void addFloatToString(String & str, float val, char width, unsigned char precision);
+
+/*
+ * --------------------------------------------------
+ * 
+ * adc_to_temp()
+ * 
+ * read the NTC thermisistor and convert to temperature
+ * 
+ * --------------------------------------------------
+ */
+ 
+float adc_to_temp(int raw_adc_val){
+
+  // we are using the built in 10 bit ADC for now  
+  // Mayflay has a separate 16 bit ADC peripheral.  ... might use it later
+  const int bit_depth = 10;
+  int max_adc_level = pow(2, bit_depth) - 1;  //1024 discrete levels on the ADC: 0 thru 1023
+
+  // mayfly runs largely on 3.3 volts.  ...has separate 5 volt line, but we will use 3.3 for now
+  const float vcc = 3.3; 
+
+  // a fixed resistor makes up the first leg of the voltage divider
+  // it has a resistance of 10,000 Ohms
+  const float r1 = 10000; 
+
+  const float c_to_k_offset = 273.15;
+  float nominal_temp = 25.0 + c_to_k_offset;
+
+  // the thermistor has a nominal resistance of 10k ohms at 25 deg. C
+  const int therm_nominal_resist = 10000; 
+
+  // ntc beta coefficient from datasheet
+  // see: https://www.littelfuse.com/~/media/electronics/datasheets/thermistor_probes_and_assemblies/littelfuse_thermistor_probes_assemblies_plastic_usp10982_datasheet.pdf.pdf
+  const int beta_coeff = 3892;
+
+  // convert raw ADC value to voltage (V)
+  float voltage_at_pin = vcc * ((float)raw_adc_val / (float)max_adc_level) ;
+
+  // convert voltage to ntc resistance (Ohms).
+  float therm_resist = r1 / ((vcc / voltage_at_pin) - 1);
+
+  // convert resistance to temperature using 1/T = (1/T0)+(1/B)*ln(R/R0)
+  float temp_k = 1.0 / ((1.0 / nominal_temp) + ((log(therm_resist / therm_nominal_resist)) / beta_coeff));
+  float temp_c = temp_k - c_to_k_offset;
+  return temp_c;
+}
 
 /*
  * --------------------------------------------------
@@ -412,12 +462,16 @@ String createDataRecord()
 
   data += ",";
   data += resistance_ER;
+
+  // Thermistor Sensor -----------------------------------------------
+  // Reading the sensor
+  raw_adc_val = analogRead(THERM_SENSOR_PIN);
+  float env_temp_c = adc_to_temp(raw_adc_val);
+  data += ",";
+  addFloatToString(data, env_temp_c, 3, 1); // float
   
   digitalWrite(POWER_PIN, LOW);
-  
-
   return data;
-
 }
 
 /*
