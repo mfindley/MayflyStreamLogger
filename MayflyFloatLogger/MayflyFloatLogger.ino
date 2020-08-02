@@ -33,10 +33,13 @@
  
 #define   SD_SS_PIN 12 // Digital pin 12 is the MicroSD slave select pin on the Mayfly
 
+// The analog pin that connects to the ER sensor.
+#define ER_SENSOR_PIN A0
+
 char*     filename = (char*)"logfile.csv"; // The data log file
 
 // Data Header
-#define   DATA_HEADER "Sensor Name:,FloatSwitch,EnviroDIY_Mayfly Data Logger,EnviroDIY_Mayfly Data Logger\r\nVariable Name:,Up/Down,Battery_Voltage,Board_Temp_C\r\nResult Unit:,wet/dry,volt,degreeCelsius\r\nDate and Time in MDT (UTC-6),Up/Down,Battery voltage,Temperature"
+#define   DATA_HEADER "Sensor Name:,FloatSwitch,EnviroDIY_Mayfly Data Logger,EnviroDIY_Mayfly Data Logger\r\nVariable Name:,Up/Down,Battery_Voltage,Board_Temp_C,ER\r\nResult Unit:,wet/dry,volt,degreeCelsius,Ohms\r\nDate and Time in MDT (UTC-6),Up/Down,Battery voltage,Temperature,ER"
 
 #define   FLOAT_SWITCH_PIN 4 // digital pin 4
 #define   POWER_PIN 22  // pin on the Mayfly to switch on/off power to the sensors.
@@ -52,6 +55,10 @@ float     boardtemp;
 int       batteryPin = A6; // select the input pin for the potentiometer
 int       batterysenseValue = 0; // variable to store the value coming from the sensor
 float     batteryvoltage;
+
+// The variables for the ER sensor
+// The resistance (Ω) of the resistor in series with the ER sensor
+const int resistorSeries_ER = 10000;
 
 /*
  * --------------------------------------------------
@@ -389,11 +396,26 @@ String createDataRecord()
   batteryvoltage = (3.3/1023.) * 4.7 * batterysenseValue; 
 
   addFloatToString(data, batteryvoltage, 4, 2);
-  
-  data += ","; 
-  
-  addFloatToString(data, boardtemp, 3, 1); // float 
-  
+
+  data += ",";
+
+  addFloatToString(data, boardtemp, 3, 1); // float
+
+  // ER Sensor -----------------------------------------------
+  // Reading the sensor
+  float valueADC_ER = analogRead(ER_SENSOR_PIN);
+
+  // Converting the ADC value into resistance, using R = Rr / ((1023/ACD value)-1)
+  // Where R is the resistance (Ω) between the electrodes and Rr the resistance (Ω) of the resistor in series with the ER sensor
+  float conversionR_ER = 1023 / valueADC_ER - 1;
+  // The resistance (Ω) between the electrodes
+  unsigned long resistance_ER = resistorSeries_ER / conversionR_ER;
+
+  data += ",";
+  data += resistance_ER;
+
+
+
   return data;
 
 }
