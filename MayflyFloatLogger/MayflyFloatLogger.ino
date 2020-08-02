@@ -368,7 +368,6 @@ String createDataRecord()
   int float_switch_state = digitalRead(FLOAT_SWITCH_PIN);
   data += float_switch_state; // temperature Celcius
   data += ",";
-  digitalWrite(POWER_PIN, LOW);
 
 
   // Battery Voltage and Board Temperature --------------------
@@ -413,8 +412,9 @@ String createDataRecord()
 
   data += ",";
   data += resistance_ER;
-
-
+  
+  digitalWrite(POWER_PIN, LOW);
+  
 
   return data;
 
